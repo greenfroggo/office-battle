@@ -2,55 +2,83 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
 type ScoreEntry = {
   id?: number;
   name: string;
   score: number;
+  company?: string;
 };
 
 export default function ClickBattle() {
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   const [started, setStarted] = useState(false);
   const [time, setTime] = useState(10);
   const [score, setScore] = useState(0);
 
-  const [heat, setHeat] = useState(0); // 🔥 new
-  const [clickAnim, setClickAnim] = useState(false); // 💥 animation trigger
+  const [heat, setHeat] = useState(0);
+  const [clickAnim, setClickAnim] = useState(false);
+
+  const [board, setBoard] = useState<ScoreEntry[]>([]);
+  const [view, setView] = useState<"global" | "company">("global");
 
   const scoreRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [board, setBoard] = useState<ScoreEntry[]>([]);
-
-  // AUTH
+  // 🔐 AUTH + PROFILE
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getUser();
-      setUser(data.user);
+      const authUser = data.user;
+
+      if (!authUser) return;
+
+      setUser(authUser);
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+
+      setProfile(prof);
     };
 
     init();
-    fetchBoard();
   }, []);
 
-  // LEADERBOARD
+  // 🏆 LEADERBOARD
   const fetchBoard = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from("scores")
       .select("*")
       .order("score", { ascending: false })
       .limit(10);
 
+    if (view === "company" && profile?.company) {
+      query = query.eq("company", profile.company);
+    }
+
+    const { data } = await query;
+
     if (data) setBoard(data);
   };
 
-  // realtime
+  useEffect(() => {
+    fetchBoard();
+  }, [view, profile]);
+
   useEffect(() => {
     const channel = supabase
       .channel("scores-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "scores" }, fetchBoard)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "scores" },
+        fetchBoard
+      )
       .subscribe();
 
     return () => {
@@ -58,7 +86,7 @@ export default function ClickBattle() {
     };
   }, []);
 
-  // LOGIN
+  // 🔑 LOGIN
   const login = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -71,9 +99,10 @@ export default function ClickBattle() {
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setProfile(null);
   };
 
-  // GAME START
+  // 🎮 START GAME
   const startGame = () => {
     setStarted(true);
     setScore(0);
@@ -86,8 +115,7 @@ export default function ClickBattle() {
       setTime((t) => {
         const newTime = t - 1;
 
-        // 🔥 heat increases as time goes down
-        setHeat((h) => h + 10);
+        setHeat((h) => Math.min(h + 10, 100));
 
         if (newTime <= 0) {
           clearInterval(intervalRef.current!);
@@ -101,32 +129,33 @@ export default function ClickBattle() {
     }, 1000);
   };
 
-  // CLICK
+  // ⚡ CLICK
   const hit = () => {
     if (!started) return;
 
     scoreRef.current += 1;
     setScore(scoreRef.current);
 
-    // 💥 trigger animation
     setClickAnim(true);
     setTimeout(() => setClickAnim(false), 120);
   };
 
+  // 💾 SAVE SCORE (WITH COMPANY)
   const saveScore = async (finalScore: number) => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     await supabase.from("scores").insert([
       {
-        name: user.user_metadata?.full_name || user.email,
+        name: profile.first_name + " " + profile.last_name,
         score: finalScore,
+        company: profile.company,
       },
     ]);
 
     fetchBoard();
   };
 
-  // COLOR SHIFT BASED ON HEAT
+  // 🎨 HEAT COLORS
   const heatColor =
     heat < 30
       ? "bg-blue-600"
@@ -145,7 +174,7 @@ export default function ClickBattle() {
       ? "shadow-orange-500"
       : "shadow-red-500";
 
-  // 🔐 LOGIN
+  // 🔐 LOGIN SCREEN
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -161,47 +190,29 @@ export default function ClickBattle() {
 
   // 🎮 GAME SCREEN
   if (started) {
-    const progress = (time / 10) * 100;
-
     return (
-      <main className={`min-h-screen flex items-center justify-center bg-slate-950 transition-all duration-300`}>
+      <main className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="w-full max-w-sm p-6">
 
-          {/* SCORE */}
+          <Link href="/" className="text-slate-400 text-sm mb-4 block">
+            ← Esci ai giochi
+          </Link>
+
           <div className="text-center mb-6">
             <p className="text-slate-400">Score</p>
-            <p
-              className={`text-7xl font-black transition-transform duration-100 ${
-                clickAnim ? "scale-125 text-white" : "scale-100"
-              }`}
-            >
-              {score}
-            </p>
+            <p className="text-7xl font-black">{score}</p>
           </div>
 
-          {/* HEAT BAR */}
-          <div className="w-full bg-slate-800 h-2 rounded-full mb-4 overflow-hidden">
-            <div
-              className={`h-2 transition-all duration-300 ${heatColor}`}
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <div className={`w-full h-2 rounded-full mb-4 ${heatColor}`} />
 
-          {/* TIMER */}
-          <p className="text-center text-slate-400 mb-6">
-            Time: {time}s
-          </p>
-
-          {/* BUTTON */}
           <button
             onClick={hit}
-            className={`w-full py-12 text-2xl font-black rounded-3xl text-white transition-all duration-150 active:scale-95 shadow-xl ${heatColor} ${glow}`}
+            className={`w-full py-12 text-2xl font-black rounded-3xl text-white transition-all active:scale-95 ${heatColor} ${glow}`}
           >
-            ⚡ CLICK FASTER ⚡
+            ⚡ CLICK ⚡
           </button>
 
-          {/* HEAT TEXT */}
-          <p className="text-center mt-4 text-slate-500 text-sm">
+          <p className="text-center mt-4 text-slate-400">
             Heat: {heat}%
           </p>
         </div>
@@ -218,8 +229,11 @@ export default function ClickBattle() {
           <div>
             <p className="text-slate-400 text-sm">Player</p>
             <h1 className="font-bold">
-              {user?.user_metadata?.full_name || user?.email}
+              {profile?.first_name} {profile?.last_name}
             </h1>
+            <p className="text-xs text-slate-400">
+              {profile?.company}
+            </p>
           </div>
 
           <button onClick={logout} className="text-sm text-slate-400">
@@ -227,33 +241,56 @@ export default function ClickBattle() {
           </button>
         </div>
 
-        {/* START */}
         <button
           onClick={startGame}
-          className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-bold mb-8 transition-all active:scale-95"
+          className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-bold mb-6"
         >
           ⚡ Start Click Battle
         </button>
 
-        {/* LEADERBOARD */}
-        <div>
-          <h2 className="text-slate-400 text-xs mb-3 uppercase">
-            Leaderboard
-          </h2>
+        {/* TOGGLE LEADERBOARD */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setView("global")}
+            className={`flex-1 py-2 rounded-lg text-sm ${
+              view === "global"
+                ? "bg-blue-600"
+                : "bg-slate-800"
+            }`}
+          >
+            🌍 Global
+          </button>
 
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-            {board.map((b, i) => (
-              <div
-                key={i}
-                className="flex justify-between px-4 py-3 border-b border-slate-800 last:border-0"
-              >
-                <span>
-                  {i + 1}. {b.name}
-                </span>
-                <span className="font-bold">{b.score}</span>
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={() => setView("company")}
+            className={`flex-1 py-2 rounded-lg text-sm ${
+              view === "company"
+                ? "bg-green-600"
+                : "bg-slate-800"
+            }`}
+          >
+            🏢 Company
+          </button>
+        </div>
+
+        {/* LEADERBOARD */}
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          {board.map((b, i) => (
+            <div
+              key={i}
+              className="flex justify-between px-4 py-3 border-b border-slate-800 last:border-0"
+            >
+              <span>
+                {i + 1}. {b.name}
+              </span>
+
+              <span className="text-xs text-slate-400">
+                {b.company}
+              </span>
+
+              <span className="font-bold">{b.score}</span>
+            </div>
+          ))}
         </div>
       </div>
     </main>
