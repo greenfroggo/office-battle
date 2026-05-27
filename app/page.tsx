@@ -185,12 +185,22 @@ export default function Home() {
         )}
 
         {/* Start button */}
-        <button
-          onClick={startGame}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 rounded-2xl text-lg transition-colors mb-8 shadow-lg shadow-blue-900"
-        >
-          ⚡ Inizia la sfida
-        </button>
+        <div className="grid grid-cols-2 gap-4 mb-8">
+  <button
+    onClick={startGame}
+    className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 rounded-2xl text-center transition-colors shadow-lg shadow-blue-900"
+  >
+    <div className="text-3xl mb-1">⚡</div>
+    <div className="text-sm font-bold">Click Battle</div>
+    <div className="text-xs text-blue-300 mt-1">10 secondi</div>
+  </button>
+
+  <Link href="/trivia" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-6 rounded-2xl text-center transition-colors block">
+    <div className="text-3xl mb-1">🧠</div>
+    <div className="text-sm font-bold">Trivia</div>
+    <div className="text-xs text-slate-400 mt-1">10 domande</div>
+  </Link>
+</div>
 
         {/* Leaderboard */}
         <div>
