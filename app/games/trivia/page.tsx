@@ -115,24 +115,20 @@ export default function Trivia() {
     init();
   }, []);
 
-  /* ---------------- LEADERBOARD (ALLINEATA CLICK BATTLE) ---------------- */
+  /* ---------------- LEADERBOARD ---------------- */
   const fetchBoard = async (mode: "global" | "company") => {
     let query = supabase
       .from("trivia_scores")
       .select("*")
-      .not("user_id", "is", null)
       .order("score", { ascending: false })
       .limit(50);
 
     if (mode === "company") {
-      const company = profile?.company;
-
-      if (!company) {
+      if (!profile?.company) {
         setBoard([]);
         return;
       }
-
-      query = query.eq("company", company);
+      query = query.eq("company", profile.company);
     }
 
     const { data, error } = await query;
@@ -142,7 +138,7 @@ export default function Trivia() {
       return;
     }
 
-    if (data) setBoard(data);
+    setBoard(data || []);
   };
 
   useEffect(() => {
@@ -188,9 +184,7 @@ export default function Trivia() {
     setLocked(true);
 
     const correct = option === q.answer;
-
-    let newScore = score;
-    if (correct) newScore++;
+    const newScore = correct ? score + 1 : score;
 
     setScore(newScore);
 
@@ -202,34 +196,57 @@ export default function Trivia() {
 
       if (next >= questions.length) {
         setFinished(true);
-        saveScore(newScore);
+
+        // IMPORTANT FIX: evita race condition
+        setTimeout(() => {
+          saveScore(newScore);
+        }, 200);
+
       } else {
         setIndex(next);
       }
     }, 900);
   };
 
-  /* ---------------- SAVE SCORE (ALLINEATO CLICK BATTLE) ---------------- */
+  /* ---------------- SAVE SCORE (FIXED) ---------------- */
   const saveScore = async (finalScore: number) => {
-    if (!user || !profile) return;
+    console.log("Saving score...", finalScore);
+
+    const { data: session } = await supabase.auth.getUser();
+    const currentUser = session.user;
+
+    if (!currentUser) {
+      console.error("No user found");
+      return;
+    }
+
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (!prof) {
+      console.error("No profile found");
+      return;
+    }
 
     const { error } = await supabase.from("trivia_scores").insert([
       {
-        name: `${profile.first_name} ${profile.last_name}`,
+        name: `${prof.first_name} ${prof.last_name}`,
         score: finalScore,
-        user_id: user.id,
-        company: profile.company,
+        user_id: currentUser.id,
+        company: prof.company,
       },
     ]);
 
     if (error) {
-      console.error(error);
-      return;
+      console.error("Insert error:", error);
+    } else {
+      console.log("Score saved!");
     }
 
-    setTimeout(() => {
-      fetchBoard(view);
-    }, 300);
+    fetchBoard(view);
   };
 
   /* ---------------- UI ---------------- */
@@ -332,7 +349,7 @@ export default function Trivia() {
           </div>
         )}
 
-        {/* TOGGLE */}
+        {/* LEADERBOARD */}
         <div className="flex gap-2 mt-6 mb-3">
           <button
             onClick={() => setView("global")}
@@ -353,7 +370,6 @@ export default function Trivia() {
           </button>
         </div>
 
-        {/* LEADERBOARD (ALLINEATA CLICK BATTLE) */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           {board.map((b, i) => (
             <div
