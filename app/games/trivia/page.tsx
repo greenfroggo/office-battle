@@ -1,303 +1,371 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import Link from "next/link";
 
-type ScoreEntry = {
-  id?: number;
-  name: string;
-  score: number;
+type Question = {
+  question: string;
+  options: string[];
+  answer: string;
 };
 
-const QUESTIONS = [
-  { question: "Qual è la capitale dell'Australia?", options: ["Sydney", "Melbourne", "Canberra", "Perth"], answer: "Canberra" },
-  { question: "Quanti elementi ha la tavola periodica?", options: ["108", "118", "128", "98"], answer: "118" },
-  { question: "Chi ha fondato Apple?", options: ["Bill Gates", "Steve Jobs", "Elon Musk", "Jeff Bezos"], answer: "Steve Jobs" },
-  { question: "In che anno è caduto il muro di Berlino?", options: ["1987", "1991", "1989", "1993"], answer: "1989" },
-  { question: "Qual è il paese più grande del mondo?", options: ["Canada", "Cina", "USA", "Russia"], answer: "Russia" },
-  { question: "Quante corde ha una chitarra standard?", options: ["4", "5", "6", "7"], answer: "6" },
-  { question: "Chi ha scritto 'La Divina Commedia'?", options: ["Petrarca", "Boccaccio", "Dante", "Leopardi"], answer: "Dante" },
-  { question: "Qual è il pianeta più grande del sistema solare?", options: ["Saturno", "Giove", "Urano", "Nettuno"], answer: "Giove" },
-  { question: "Cosa significa 'CEO'?", options: ["Chief Execution Order", "Chief Executive Officer", "Central Executive Operator", "Corporate Executive Officer"], answer: "Chief Executive Officer" },
-  { question: "In che anno è stato fondato Google?", options: ["1996", "1998", "2000", "2002"], answer: "1998" },
-  { question: "Qual è la valuta del Giappone?", options: ["Yuan", "Won", "Yen", "Baht"], answer: "Yen" },
-  { question: "Quanti continenti ci sono sulla Terra?", options: ["5", "6", "7", "8"], answer: "7" },
-  { question: "Chi ha dipinto la Gioconda?", options: ["Michelangelo", "Raffaello", "Leonardo da Vinci", "Caravaggio"], answer: "Leonardo da Vinci" },
-  { question: "Qual è il linguaggio di programmazione più usato nel 2024?", options: ["Java", "Python", "JavaScript", "C++"], answer: "JavaScript" },
-  { question: "Quanti giocatori ci sono in una squadra di calcio?", options: ["10", "11", "12", "9"], answer: "11" },
+type ScoreEntry = {
+  name: string;
+  score: number;
+  user_id?: string;
+  company?: string;
+};
+
+/* -----------------------------
+   DOMANDE ITALIANE
+------------------------------*/
+const QUESTION_BANK: Question[] = [
+  {
+    question: "Qual è la capitale d'Italia?",
+    options: ["Milano", "Roma", "Napoli", "Torino"],
+    answer: "Roma",
+  },
+  {
+    question: "Quanto fa 7 x 8?",
+    options: ["54", "56", "58", "64"],
+    answer: "56",
+  },
+  {
+    question: "Chi ha dipinto la Gioconda?",
+    options: ["Van Gogh", "Picasso", "Leonardo da Vinci", "Michelangelo"],
+    answer: "Leonardo da Vinci",
+  },
+  {
+    question: "Qual è il pianeta più grande del sistema solare?",
+    options: ["Terra", "Marte", "Giove", "Saturno"],
+    answer: "Giove",
+  },
+  {
+    question: "Qual è la capitale della Francia?",
+    options: ["Lione", "Parigi", "Marsiglia", "Nizza"],
+    answer: "Parigi",
+  },
+  {
+    question: "Quanti continenti ci sono?",
+    options: ["5", "6", "7", "8"],
+    answer: "7",
+  },
+  {
+    question: "Qual è il risultato di 10 / 2?",
+    options: ["2", "5", "10", "20"],
+    answer: "5",
+  },
+  {
+    question: "Quale linguaggio gira nei browser?",
+    options: ["Python", "C++", "JavaScript", "Java"],
+    answer: "JavaScript",
+  },
+  {
+    question: "Chi ha creato React?",
+    options: ["Google", "Meta", "Microsoft", "Amazon"],
+    answer: "Meta",
+  },
 ];
 
+/* -----------------------------
+   SHUFFLE
+------------------------------*/
+function shuffle<T>(array: T[]): T[] {
+  return [...array].sort(() => Math.random() - 0.5);
+}
+
+/* -----------------------------
+   COMPONENT
+------------------------------*/
 export default function Trivia() {
-  const [user, setUser] = useState<string | null>(null);
-  const [name, setName] = useState("");
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
-  const [started, setStarted] = useState(false);
-  const [finished, setFinished] = useState(false);
-
-  const [questions, setQuestions] = useState<typeof QUESTIONS>([]);
-  const [current, setCurrent] = useState(0);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [index, setIndex] = useState(0);
 
   const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
 
-  const [time, setTime] = useState(15);
-
   const [board, setBoard] = useState<ScoreEntry[]>([]);
+  const [view, setView] = useState<"global" | "company">("global");
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // LOAD USER
+  /* ---------------- AUTH ---------------- */
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setUser(savedUser);
-    fetchBoard();
+    const init = async () => {
+      const { data } = await supabase.auth.getUser();
+      const authUser = data.user;
+      if (!authUser) return;
+
+      setUser(authUser);
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+
+      setProfile(prof);
+    };
+
+    init();
   }, []);
 
-  const fetchBoard = async () => {
-    const { data } = await supabase
+  /* ---------------- LEADERBOARD (ALLINEATA CLICK BATTLE) ---------------- */
+  const fetchBoard = async (mode: "global" | "company") => {
+    let query = supabase
       .from("trivia_scores")
       .select("*")
+      .not("user_id", "is", null)
       .order("score", { ascending: false })
-      .limit(10);
+      .limit(50);
+
+    if (mode === "company") {
+      const company = profile?.company;
+
+      if (!company) {
+        setBoard([]);
+        return;
+      }
+
+      query = query.eq("company", company);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Leaderboard error:", error);
+      return;
+    }
 
     if (data) setBoard(data);
   };
 
-  // LOGIN
-  const login = () => {
-    if (!name.trim()) return;
-    localStorage.setItem("user", name);
-    setUser(name);
+  useEffect(() => {
+    if (!user) return;
+    fetchBoard(view);
+  }, [view, profile, user]);
+
+  /* ---------------- AUTH ---------------- */
+  const login = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
   };
 
-  // START GAME
-  const startGame = () => {
-    const shuffled = [...QUESTIONS]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 10);
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+  };
 
-    setQuestions(shuffled);
+  /* ---------------- START GAME ---------------- */
+  const startGame = () => {
+    const selected = shuffle(QUESTION_BANK).slice(0, 10);
+
+    setQuestions(selected);
+    setIndex(0);
     setScore(0);
-    setCurrent(0);
+    setFinished(false);
     setSelected(null);
     setLocked(false);
-    setFinished(false);
-    setStarted(true);
-
-    startTimer();
   };
 
-  // TIMER
-  const startTimer = () => {
-    setTime(15);
+  /* ---------------- ANSWER ---------------- */
+  const answer = (option: string) => {
+    if (locked) return;
 
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    timerRef.current = setInterval(() => {
-      setTime((t) => {
-        if (t <= 1) {
-          clearInterval(timerRef.current!);
-          handleNext();
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-  };
-
-  // ANSWER
-  const handleAnswer = (option: string) => {
-    if (selected || locked) return;
-
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const correctAnswer = questions[current]?.answer;
+    const q = questions[index];
 
     setSelected(option);
     setLocked(true);
 
-    if (option === correctAnswer) {
-      setScore((s) => s + 1);
-    }
+    const correct = option === q.answer;
 
-    setTimeout(() => handleNext(), 800);
-  };
+    let newScore = score;
+    if (correct) newScore++;
 
-  // NEXT QUESTION
-  const handleNext = () => {
-    setLocked(false);
+    setScore(newScore);
 
-    if (current + 1 >= questions.length) {
-      setStarted(false);
-      setFinished(true);
-      saveScore();
-    } else {
-      setCurrent((c) => c + 1);
+    setTimeout(() => {
+      const next = index + 1;
+
       setSelected(null);
-      startTimer();
-    }
+      setLocked(false);
+
+      if (next >= questions.length) {
+        setFinished(true);
+        saveScore(newScore);
+      } else {
+        setIndex(next);
+      }
+    }, 900);
   };
 
-  // SAVE SCORE
-  const saveScore = async () => {
-    if (!user) return;
+  /* ---------------- SAVE SCORE (ALLINEATO CLICK BATTLE) ---------------- */
+  const saveScore = async (finalScore: number) => {
+    if (!user || !profile) return;
 
-    await supabase.from("trivia_scores").insert([
+    const { error } = await supabase.from("trivia_scores").insert([
       {
-        name: user,
-        score,
+        name: `${profile.first_name} ${profile.last_name}`,
+        score: finalScore,
+        user_id: user.id,
+        company: profile.company,
       },
     ]);
 
-    fetchBoard();
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setTimeout(() => {
+      fetchBoard(view);
+    }, 300);
   };
 
-  // SAFE PROGRESS
-  const progress =
-    questions.length > 0 ? (current / questions.length) * 100 : 0;
-
-  const q = questions[current];
-
-  // LOGIN SCREEN
+  /* ---------------- UI ---------------- */
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 w-full max-w-sm">
-          <h1 className="text-white text-2xl font-bold mb-6 text-center">
-            🧠 Trivia Battle
-          </h1>
-
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Inserisci nome"
-            className="w-full px-4 py-3 rounded-xl bg-slate-800 text-white mb-4"
-          />
-
-          <button
-            onClick={login}
-            className="w-full bg-blue-600 py-3 rounded-xl font-bold"
-          >
-            Entra →
-          </button>
-
-          <Link href="/" className="block text-center mt-4 text-slate-400 text-sm">
-            ← Torna ai giochi
-          </Link>
-        </div>
+        <button
+          onClick={login}
+          className="bg-white text-black px-6 py-3 rounded-xl font-bold"
+        >
+          Login with Google
+        </button>
       </main>
     );
   }
 
-  // GAME SCREEN
-  if (started && q) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="max-w-lg mx-auto pt-6">
-
-          <Link href="/" className="text-slate-400 text-sm mb-4 block">
-            ← Home
-          </Link>
-
-          {/* SCORE */}
-          <div className="text-center mb-4">
-            <div className="text-slate-400 text-sm">Score</div>
-            <div className="text-2xl font-bold">
-              {score} / {questions.length}
-            </div>
-          </div>
-
-          {/* TIMER */}
-          <div className="flex justify-between text-sm text-slate-400 mb-2">
-            <span>Domanda {current + 1}/10</span>
-            <span>{time}s</span>
-          </div>
-
-          <div className="w-full bg-slate-800 h-1 mb-6">
-            <div
-              className="h-1 bg-blue-500 transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          {/* QUESTION */}
-          <div className="bg-slate-900 p-6 rounded-2xl mb-4">
-            {q.question}
-          </div>
-
-          {/* OPTIONS */}
-          <div className="grid gap-3">
-            {q.options.map((opt) => {
-              const correct = q.answer;
-              const isCorrect = opt === correct;
-              const isSelected = opt === selected;
-
-              let style = "bg-slate-800 p-4 rounded-xl";
-
-              if (locked) {
-                if (isCorrect) {
-                  style = "bg-green-600 p-4 rounded-xl font-bold";
-                } else if (isSelected && !isCorrect) {
-                  style = "bg-red-600 p-4 rounded-xl font-bold";
-                } else {
-                  style = "bg-slate-800 p-4 rounded-xl opacity-50";
-                }
-              }
-
-              return (
-                <button
-                  key={opt}
-                  onClick={() => handleAnswer(opt)}
-                  disabled={locked}
-                  className={style}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // HOME / RESULT
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6">
+    <main className="min-h-screen bg-slate-950 text-white p-6 pb-24">
+
+      <Link
+        href="/"
+        className="fixed top-4 left-4 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-sm"
+      >
+        ← Home
+      </Link>
+
       <div className="max-w-sm mx-auto pt-10">
 
-        <Link href="/" className="text-slate-400 text-sm mb-4 block">
-          ← Torna ai giochi
-        </Link>
+        {/* HEADER */}
+        <div className="flex justify-between mb-6">
+          <div>
+            <p className="text-slate-400 text-sm">Player</p>
+            <h1 className="font-bold">
+              {profile?.first_name} {profile?.last_name}
+            </h1>
+            <p className="text-xs text-slate-400">{profile?.company}</p>
+          </div>
 
-        <h1 className="text-2xl font-bold mb-2">🧠 Trivia Battle</h1>
-        <p className="text-slate-400 mb-6">Giocatore: {user}</p>
+          <button onClick={logout} className="text-sm text-slate-400">
+            Logout
+          </button>
+        </div>
 
-        {finished && (
-          <div className="bg-blue-900 p-4 rounded-xl mb-6">
-            Score: {score}/{questions.length || 10}
+        {/* START */}
+        {!questions.length && !finished && (
+          <button
+            onClick={startGame}
+            className="w-full bg-blue-600 py-6 rounded-2xl font-bold mb-6"
+          >
+            🧠 Start Trivia
+          </button>
+        )}
+
+        {/* GAME */}
+        {!finished && questions.length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <p className="text-slate-400 text-sm mb-4">
+              {questions[index]?.question}
+            </p>
+
+            <div className="space-y-2">
+              {questions[index]?.options.map((o) => (
+                <button
+                  key={o}
+                  onClick={() => answer(o)}
+                  className={`w-full py-2 rounded-xl transition
+                    ${
+                      locked
+                        ? o === questions[index]?.answer
+                          ? "bg-green-600"
+                          : o === selected
+                          ? "bg-red-600"
+                          : "bg-slate-800 opacity-60"
+                        : "bg-slate-800 hover:bg-slate-700"
+                    }`}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-xs text-slate-500 mt-4">
+              Score: {score}
+            </p>
           </div>
         )}
 
-        <button
-          onClick={startGame}
-          className="w-full bg-blue-600 py-5 rounded-2xl font-bold mb-6"
-        >
-          {finished ? "Gioca ancora" : "Inizia"}
-        </button>
+        {/* END */}
+        {finished && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+            <p className="text-slate-400 mb-2">Game finished</p>
+            <p className="text-4xl font-bold mb-4">{score}</p>
 
-        <div className="bg-slate-900 rounded-2xl p-4">
+            <button
+              onClick={startGame}
+              className="w-full bg-blue-600 py-3 rounded-xl font-bold"
+            >
+              🔁 Play again
+            </button>
+          </div>
+        )}
+
+        {/* TOGGLE */}
+        <div className="flex gap-2 mt-6 mb-3">
+          <button
+            onClick={() => setView("global")}
+            className={`flex-1 py-2 rounded-lg ${
+              view === "global" ? "bg-blue-600" : "bg-slate-800"
+            }`}
+          >
+            🌍 Global
+          </button>
+
+          <button
+            onClick={() => setView("company")}
+            className={`flex-1 py-2 rounded-lg ${
+              view === "company" ? "bg-green-600" : "bg-slate-800"
+            }`}
+          >
+            🏢 Company
+          </button>
+        </div>
+
+        {/* LEADERBOARD (ALLINEATA CLICK BATTLE) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           {board.map((b, i) => (
-            <div key={i} className="flex justify-between py-2">
-              <span>
-                {i + 1}. {b.name}
-              </span>
-              <span>{b.score}</span>
+            <div
+              key={i}
+              className="flex justify-between px-4 py-3 border-b border-slate-800"
+            >
+              <span>{b.name}</span>
+              <span className="font-bold">{b.score}</span>
             </div>
           ))}
         </div>
+
       </div>
     </main>
   );

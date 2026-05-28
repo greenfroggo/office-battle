@@ -9,6 +9,7 @@ type ScoreEntry = {
   name: string;
   score: number;
   company?: string;
+  user_id?: string;
 };
 
 export default function ClickBattle() {
@@ -18,7 +19,6 @@ export default function ClickBattle() {
   const [started, setStarted] = useState(false);
   const [time, setTime] = useState(10);
   const [score, setScore] = useState(0);
-
   const [clickAnim, setClickAnim] = useState(false);
 
   const [board, setBoard] = useState<ScoreEntry[]>([]);
@@ -27,12 +27,11 @@ export default function ClickBattle() {
   const scoreRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // AUTH + PROFILE
+  // ---------------- AUTH ----------------
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getUser();
       const authUser = data.user;
-
       if (!authUser) return;
 
       setUser(authUser);
@@ -49,11 +48,12 @@ export default function ClickBattle() {
     init();
   }, []);
 
-  // FETCH LEADERBOARD
+  // ---------------- BOARD ----------------
   const fetchBoard = async (mode: "global" | "company") => {
     let query = supabase
       .from("scores")
       .select("*")
+      .not("user_id", "is", null)
       .order("score", { ascending: false })
       .limit(50);
 
@@ -63,6 +63,7 @@ export default function ClickBattle() {
         setBoard([]);
         return;
       }
+
       query = query.eq("company", company);
     }
 
@@ -70,12 +71,10 @@ export default function ClickBattle() {
     if (data) setBoard(data);
   };
 
-  // REFRESH ON VIEW CHANGE
   useEffect(() => {
     fetchBoard(view);
   }, [view, profile]);
 
-  // REALTIME
   useEffect(() => {
     const channel = supabase
       .channel("scores-live")
@@ -91,7 +90,7 @@ export default function ClickBattle() {
     };
   }, [view, profile]);
 
-  // LOGIN
+  // ---------------- AUTH ACTIONS ----------------
   const login = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -107,12 +106,11 @@ export default function ClickBattle() {
     setProfile(null);
   };
 
-  // START GAME
+  // ---------------- GAME ----------------
   const startGame = () => {
     setStarted(true);
     setScore(0);
     setTime(10);
-
     scoreRef.current = 0;
 
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -130,7 +128,6 @@ export default function ClickBattle() {
     }, 1000);
   };
 
-  // CLICK
   const hit = () => {
     if (!started) return;
 
@@ -141,7 +138,6 @@ export default function ClickBattle() {
     setTimeout(() => setClickAnim(false), 100);
   };
 
-  // SAVE SCORE
   const saveScore = async (finalScore: number) => {
     if (!user || !profile) return;
 
@@ -150,6 +146,7 @@ export default function ClickBattle() {
         name: `${profile.first_name} ${profile.last_name}`,
         score: finalScore,
         company: profile.company,
+        user_id: user.id,
       },
     ]);
 
@@ -158,7 +155,7 @@ export default function ClickBattle() {
 
   const progress = (time / 10) * 100;
 
-  // LOGIN
+  // ---------------- LOGIN ----------------
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -172,68 +169,65 @@ export default function ClickBattle() {
     );
   }
 
-  // GAME
+  // ---------------- GAME ACTIVE ----------------
   if (started) {
     return (
-      <main className="min-h-screen bg-slate-950 text-white p-6">
+      <main className="min-h-screen bg-slate-950 text-white p-6 pb-24">
 
-        {/* HOME BUTTON (FIXED) */}
         <Link
           href="/"
-          className="fixed top-4 left-4 z-50 bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+          className="fixed top-4 left-4 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-sm"
         >
           ← Home
         </Link>
 
-        <div className="max-w-sm mx-auto pt-10">
+        <div className="max-w-sm mx-auto pt-10 text-center">
 
-          <div className="text-center mb-6">
-            <p className="text-slate-400">Score</p>
-            <p
-              className={`text-7xl font-black transition-transform ${
-                clickAnim ? "scale-125" : "scale-100"
-              }`}
-            >
-              {score}
-            </p>
-          </div>
+          <p className="text-slate-400">Score</p>
 
-          <div className="w-full bg-slate-800 h-2 rounded-full mb-3">
+          <p
+            className={`text-7xl font-black transition-transform ${
+              clickAnim ? "scale-125" : "scale-100"
+            }`}
+          >
+            {score}
+          </p>
+
+          <div className="w-full bg-slate-800 h-2 rounded-full my-4">
             <div
               className="h-2 bg-blue-500 transition-all duration-1000"
               style={{ width: `${progress}%` }}
             />
           </div>
 
-          <p className="text-center text-slate-400 mb-6">
-            {time}s remaining
-          </p>
+          <p className="text-slate-400 mb-6">{time}s remaining</p>
 
           <button
             onClick={hit}
-            className="w-full py-12 text-2xl font-black rounded-3xl bg-blue-600 active:scale-95 text-white"
+            className="w-full py-12 text-2xl font-black rounded-3xl bg-blue-600 active:scale-95"
           >
             ⚡ CLICK ⚡
           </button>
+
         </div>
       </main>
     );
   }
 
-  // HOME
+  // ---------------- MAIN MENU ----------------
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6">
+    <main className="min-h-screen bg-slate-950 text-white p-6 pb-24">
 
-      {/* HOME BUTTON */}
       <Link
         href="/"
-        className="fixed top-4 left-4 z-50 bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+        className="fixed top-4 left-4 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-sm"
       >
         ← Home
       </Link>
 
       <div className="max-w-sm mx-auto pt-10">
 
+        {/* HEADER (SHARED STYLE CON TRIVIA) */}
         <div className="flex justify-between mb-6">
           <div>
             <p className="text-slate-400 text-sm">Player</p>
@@ -248,6 +242,7 @@ export default function ClickBattle() {
           </button>
         </div>
 
+        {/* START */}
         <button
           onClick={startGame}
           className="w-full bg-blue-600 py-6 rounded-2xl font-bold mb-6"
@@ -276,21 +271,47 @@ export default function ClickBattle() {
           </button>
         </div>
 
-        {/* LEADERBOARD */}
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        {/* LEADERBOARD (STANDARDIZZATA) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+
           {board.map((b, i) => (
             <div
               key={i}
-              className="flex justify-between px-4 py-3 border-b border-slate-800"
+              className="flex justify-between items-center px-4 py-3 border-b border-slate-800"
             >
-              <span className="text-slate-300">
-                {i + 1}. {b.name}
+              <div className="flex items-center gap-3 flex-1">
+
+                <span className="text-slate-500 text-sm w-6">
+                  {i + 1}.
+                </span>
+
+                {b.user_id ? (
+                  <Link
+                    href={`/user/${b.user_id}`}
+                    className="text-slate-300 hover:text-white"
+                  >
+                    {b.name}
+                  </Link>
+                ) : (
+                  <span className="text-slate-300">
+                    {b.name}
+                  </span>
+                )}
+
+              </div>
+
+              <span className="text-xs text-slate-400 mr-4">
+                {b.company}
               </span>
-              <span className="text-xs text-slate-400">{b.company}</span>
-              <span className="font-bold">{b.score}</span>
+
+              <span className="font-bold">
+                {b.score}
+              </span>
             </div>
           ))}
+
         </div>
+
       </div>
     </main>
   );

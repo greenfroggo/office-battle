@@ -14,14 +14,14 @@ type Profile = {
 };
 
 const COMPANY_COLORS: Record<string, string> = {
-  "McKinsey": "bg-blue-500",
-  "BCG": "bg-green-500",
-  "Bain": "bg-red-500",
-  "Deloitte": "bg-yellow-500",
-  "PwC": "bg-purple-500",
-  "EY": "bg-orange-500",
-  "KPMG": "bg-pink-500",
-  "Other": "bg-slate-500",
+  McKinsey: "bg-blue-500",
+  BCG: "bg-green-500",
+  Bain: "bg-red-500",
+  Deloitte: "bg-yellow-500",
+  PwC: "bg-purple-500",
+  EY: "bg-orange-500",
+  KPMG: "bg-pink-500",
+  Other: "bg-slate-500",
 };
 
 export default function Home() {
@@ -50,8 +50,10 @@ export default function Home() {
         const newProfile = {
           id: authUser.id,
           email: authUser.email,
-          first_name: authUser.user_metadata?.full_name?.split(" ")[0] || "",
-          last_name: authUser.user_metadata?.full_name?.split(" ")[1] || "",
+          first_name:
+            authUser.user_metadata?.full_name?.split(" ")[0] || "",
+          last_name:
+            authUser.user_metadata?.full_name?.split(" ")[1] || "",
           company,
           company_color: color,
         };
@@ -66,6 +68,7 @@ export default function Home() {
     init();
   }, []);
 
+  // 🔥 SOLO GOOGLE LOGIN
   const login = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -81,15 +84,22 @@ export default function Home() {
     setProfile(null);
   };
 
+  // ❌ NESSUNA UI EMAIL / SIGNUP
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950">
-        <button
-          onClick={login}
-          className="bg-white text-black px-6 py-3 rounded-xl font-semibold"
-        >
-          Continua con Google
-        </button>
+        <div className="text-center">
+          <button
+            onClick={login}
+            className="bg-white text-black px-6 py-3 rounded-xl font-semibold"
+          >
+            Continua con Google
+          </button>
+
+          <p className="text-slate-500 text-xs mt-4">
+            Accesso esclusivo con Google
+          </p>
+        </div>
       </main>
     );
   }
@@ -97,7 +107,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-md mx-auto pt-10">
-
         {/* HEADER USER */}
         <div className="flex justify-between items-center mb-10">
           <div>
@@ -105,16 +114,25 @@ export default function Home() {
             <h1 className="text-xl font-bold">
               {profile?.first_name} {profile?.last_name}
             </h1>
+
             <div className="flex items-center gap-2 mt-2">
-              <span className={`w-3 h-3 rounded-full ${profile?.company_color}`} />
-              <p className="text-sm text-slate-300">{profile?.company}</p>
+              <span
+                className={`w-3 h-3 rounded-full ${profile?.company_color}`}
+              />
+              <p className="text-sm text-slate-300">
+                {profile?.company}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <Link href="/profile" className="text-sm text-slate-400 hover:text-white">
+            <Link
+              href="/profile"
+              className="text-sm text-slate-400 hover:text-white"
+            >
               Profilo
             </Link>
+
             <button
               onClick={logout}
               className="text-sm text-slate-400 hover:text-white"
@@ -150,7 +168,6 @@ export default function Home() {
             </p>
           </Link>
         </div>
-
       </div>
     </main>
   );
