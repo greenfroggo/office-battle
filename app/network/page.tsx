@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import Link from "next/link";
+import UserAvatar from "@/app/components/userAvatar";
 
 type FriendRequest = {
   id: number;
@@ -15,6 +16,7 @@ type Profile = {
   id: string;
   first_name: string;
   last_name: string;
+  avatar?: string;
 };
 
 export default function NetworkPage() {
@@ -37,13 +39,19 @@ export default function NetworkPage() {
 
   const fetchProfiles = async (ids: string[]) => {
     if (!ids.length) return;
+
     const { data } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name")
+      .select("id, first_name, last_name, avatar")
       .in("id", ids);
+
     if (!data) return;
+
     const map: Record<string, Profile> = {};
-    data.forEach((p) => { map[p.id] = p; });
+    data.forEach((p) => {
+      map[p.id] = p;
+    });
+
     setProfiles(map);
   };
 
@@ -65,14 +73,20 @@ export default function NetworkPage() {
 
     const ids = [
       ...(req || []).map((r) => r.sender_id),
-      ...(fr || []).map((f) => f.sender_id === userId ? f.receiver_id : f.sender_id),
+      ...(fr || []).map((f) =>
+        f.sender_id === userId ? f.receiver_id : f.sender_id
+      ),
     ];
 
     await fetchProfiles([...new Set(ids)]);
   };
 
   const accept = async (id: number, userId: string) => {
-    await supabase.from("friendships").update({ status: "accepted" }).eq("id", id);
+    await supabase
+      .from("friendships")
+      .update({ status: "accepted" })
+      .eq("id", id);
+
     fetchData(userId);
   };
 
@@ -81,15 +95,15 @@ export default function NetworkPage() {
     fetchData(userId);
   };
 
-  if (!user) return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-950">
-      <p className="text-white text-sm">Caricamento...</p>
-    </main>
-  );
+  if (!user)
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-950">
+        <p className="text-white text-sm">Caricamento...</p>
+      </main>
+    );
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-6 pb-24">
-
       <Link href="/" className="text-slate-400 text-sm hover:text-white">
         ← Home
       </Link>
@@ -110,27 +124,36 @@ export default function NetworkPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             {requests.map((r) => {
               const p = profiles[r.sender_id];
-              const name = p ? `${p.first_name} ${p.last_name}` : "Utente";
+
               return (
-                <div key={r.id} className="flex justify-between items-center px-5 py-4 border-b border-slate-800 last:border-0">
+                <div
+                  key={r.id}
+                  className="flex justify-between items-center px-5 py-4 border-b border-slate-800 last:border-0"
+                >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center font-bold text-sm">
-                      {name[0]}
-                    </div>
-                    <Link href={`/user/${r.sender_id}`} className="font-semibold hover:text-blue-400 transition-colors">
-                      {name}
+                    <UserAvatar avatarId={p?.avatar} size={36} />
+
+                    <Link
+                      href={`/user/${r.sender_id}`}
+                      className="font-semibold hover:text-blue-400 transition-colors"
+                    >
+                      {p
+                        ? `${p.first_name} ${p.last_name}`
+                        : "Utente"}
                     </Link>
                   </div>
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => accept(r.id, user.id)}
-                      className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+                      className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl text-sm font-bold"
                     >
                       Accetta
                     </button>
+
                     <button
                       onClick={() => remove(r.id, user.id)}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm transition-colors"
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm"
                     >
                       Rifiuta
                     </button>
@@ -155,22 +178,32 @@ export default function NetworkPage() {
         ) : (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             {friends.map((f) => {
-              const friendId = f.sender_id === user.id ? f.receiver_id : f.sender_id;
+              const friendId =
+                f.sender_id === user.id ? f.receiver_id : f.sender_id;
+
               const p = profiles[friendId];
-              const name = p ? `${p.first_name} ${p.last_name}` : friendId;
+
               return (
-                <div key={f.id} className="flex justify-between items-center px-5 py-4 border-b border-slate-800 last:border-0">
+                <div
+                  key={f.id}
+                  className="flex justify-between items-center px-5 py-4 border-b border-slate-800 last:border-0"
+                >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-green-600 flex items-center justify-center font-bold text-sm">
-                      {name[0]}
-                    </div>
-                    <Link href={`/user/${friendId}`} className="font-semibold hover:text-green-400 transition-colors">
-                      {name}
+                    <UserAvatar avatarId={p?.avatar} size={36} />
+
+                    <Link
+                      href={`/user/${friendId}`}
+                      className="font-semibold hover:text-green-400 transition-colors"
+                    >
+                      {p
+                        ? `${p.first_name} ${p.last_name}`
+                        : friendId}
                     </Link>
                   </div>
+
                   <button
                     onClick={() => remove(f.id, user.id)}
-                    className="text-slate-500 hover:text-red-400 text-sm transition-colors"
+                    className="text-slate-500 hover:text-red-400 text-sm"
                   >
                     Rimuovi
                   </button>
@@ -180,7 +213,6 @@ export default function NetworkPage() {
           </div>
         )}
       </div>
-
     </main>
   );
 }

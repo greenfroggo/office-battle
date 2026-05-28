@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import Link from "next/link";
+import { avatars } from "@/app/lib/avatars";
 
 type Profile = {
   id: string;
@@ -13,6 +14,7 @@ type Profile = {
   company_color: string;
   bio?: string;
   linkedin_url?: string;
+  avatar?: string;
 };
 
 type ScoreEntry = {
@@ -61,6 +63,8 @@ export default function ProfilePage() {
   const [clickScores, setClickScores] = useState<ScoreEntry[]>([]);
   const [triviaScores, setTriviaScores] = useState<ScoreEntry[]>([]);
 
+  const [selectedAvatar, setSelectedAvatar] = useState("rookie");
+
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getUser();
@@ -79,6 +83,7 @@ export default function ProfilePage() {
         setProfile(prof);
         setBio(prof.bio || "");
         setLinkedin(prof.linkedin_url || "");
+        setSelectedAvatar(prof.avatar || "rookie");
       }
 
       const { data: clicks } = await supabase
@@ -103,6 +108,9 @@ export default function ProfilePage() {
     init();
   }, []);
 
+  const totalPoints =
+    (clickScores[0]?.score || 0) + (triviaScores[0]?.score || 0);
+
   const saveProfile = async () => {
     if (!user) return;
 
@@ -113,6 +121,7 @@ export default function ProfilePage() {
       .update({
         bio,
         linkedin_url: linkedin,
+        avatar: selectedAvatar,
       })
       .eq("id", user.id);
 
@@ -139,6 +148,9 @@ export default function ProfilePage() {
   const bestClick = clickScores.length ? clickScores[0].score : null;
   const bestTrivia = triviaScores.length ? triviaScores[0].score : null;
 
+  const currentAvatar =
+    avatars.find((a) => a.id === selectedAvatar) || avatars[0];
+
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
@@ -159,39 +171,15 @@ export default function ProfilePage() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
           <div className="flex items-center gap-4">
 
-            <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-xl font-bold">
-              {profile?.first_name?.[0]}
-              {profile?.last_name?.[0]}
+            {/* AVATAR (EMOJI) */}
+            <div className="w-14 h-14 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-2xl">
+              {currentAvatar.emoji}
             </div>
 
-            <div className="flex-1">
-
-              {/* NAME + LINKEDIN */}
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold">
-                  {profile?.first_name} {profile?.last_name}
-                </h1>
-
-                {profile?.linkedin_url && (
-                  <a
-                    href={profile.linkedin_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-slate-400 hover:text-blue-400 transition"
-                  >
-                    {/* LinkedIn SVG */}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-                    </svg>
-                  </a>
-                )}
-              </div>
+            <div>
+              <h1 className="text-xl font-bold">
+                {profile?.first_name} {profile?.last_name}
+              </h1>
 
               <p className="text-slate-400 text-sm">{profile?.email}</p>
 
@@ -225,6 +213,53 @@ export default function ProfilePage() {
                 {c}
               </option>
             ))}
+          </select>
+        </div>
+
+        {/* AVATAR SELECT */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+
+          <h2 className="text-xs text-slate-400 uppercase mb-3">
+            Avatar
+          </h2>
+
+          {/* PREVIEW */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 text-xl border border-slate-700">
+              {currentAvatar.emoji}
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold">
+                {currentAvatar.name}
+              </p>
+              <p className="text-xs text-slate-400 uppercase">
+                {currentAvatar.rarity}
+              </p>
+            </div>
+          </div>
+
+          {/* DROPDOWN */}
+          <select
+            value={selectedAvatar}
+            onChange={(e) => setSelectedAvatar(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3"
+          >
+            {avatars.map((a) => {
+              const locked = totalPoints < a.unlockPoints;
+
+              return (
+                <option
+                  key={a.id}
+                  value={a.id}
+                  disabled={locked}
+                >
+                  {locked
+                    ? `🔒 ${a.name} (${a.unlockPoints} pts)`
+                    : `${a.emoji} ${a.name}`}
+                </option>
+              );
+            })}
           </select>
         </div>
 
