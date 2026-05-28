@@ -2,24 +2,23 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/app/lib/supabase";
 
-export default function CallbackPage() {
+export default function AuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleAuth = async () => {
-      const { data } = await supabase.auth.getSession();
-
-      if (data.session) {
-        router.push("/");
-      } else {
-        router.push("/login");
-      }
+    const handleCallback = async () => {
+      await supabase.auth.getSession();
+      router.push("/");
     };
 
-    handleAuth();
-  }, []);
+    handleCallback();
+  }, [router]);
 
-  return <p>Loading...</p>;
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-slate-950">
+      <p className="text-white text-sm">Accesso in corso...</p>
+    </main>
+  );
 }
