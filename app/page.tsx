@@ -28,7 +28,6 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  // 🔐 GET USER + PROFILE
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getUser();
@@ -38,14 +37,12 @@ export default function Home() {
 
       setUser(authUser);
 
-      // fetch profile
       let { data: prof } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", authUser.id)
         .single();
 
-      // create profile if missing
       if (!prof) {
         const company = authUser.user_metadata?.company || "Other";
         const color = COMPANY_COLORS[company] || "bg-slate-500";
@@ -60,7 +57,6 @@ export default function Home() {
         };
 
         await supabase.from("profiles").insert(newProfile);
-
         prof = newProfile;
       }
 
@@ -70,7 +66,6 @@ export default function Home() {
     init();
   }, []);
 
-  // 🔑 LOGIN GOOGLE
   const login = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -80,14 +75,12 @@ export default function Home() {
     });
   };
 
-  // 🚪 LOGOUT
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
   };
 
-  // 🔐 LOGIN SCREEN
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -101,7 +94,6 @@ export default function Home() {
     );
   }
 
-  // 🏠 HOME
   return (
     <main className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-md mx-auto pt-10">
@@ -110,25 +102,26 @@ export default function Home() {
         <div className="flex justify-between items-center mb-10">
           <div>
             <p className="text-slate-400 text-sm">Welcome</p>
-
             <h1 className="text-xl font-bold">
               {profile?.first_name} {profile?.last_name}
             </h1>
-
             <div className="flex items-center gap-2 mt-2">
-              <span
-                className={`w-3 h-3 rounded-full ${profile?.company_color}`}
-              />
+              <span className={`w-3 h-3 rounded-full ${profile?.company_color}`} />
               <p className="text-sm text-slate-300">{profile?.company}</p>
             </div>
           </div>
 
-          <button
-            onClick={logout}
-            className="text-sm text-slate-400 hover:text-white"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <Link href="/profile" className="text-sm text-slate-400 hover:text-white">
+              Profilo
+            </Link>
+            <button
+              onClick={logout}
+              className="text-sm text-slate-400 hover:text-white"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* GAMES */}
@@ -137,7 +130,6 @@ export default function Home() {
         </p>
 
         <div className="grid gap-4">
-
           <Link
             href="/games/click-battle"
             className="bg-blue-600 hover:bg-blue-500 p-6 rounded-2xl font-bold text-center"
@@ -157,8 +149,8 @@ export default function Home() {
               10 questions quiz
             </p>
           </Link>
-
         </div>
+
       </div>
     </main>
   );
