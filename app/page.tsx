@@ -139,7 +139,7 @@ export default function Home() {
         <div className="grid gap-4">
 
           <Link
-            href="/click-battle"
+            href="/games/click-battle"
             className="bg-blue-600 hover:bg-blue-500 p-6 rounded-2xl font-bold text-center"
           >
             ⚡ Click Battle
@@ -149,7 +149,7 @@ export default function Home() {
           </Link>
 
           <Link
-            href="/trivia"
+            href="/games/trivia"
             className="bg-purple-600 hover:bg-purple-500 p-6 rounded-2xl font-bold text-center"
           >
             🧠 Trivia Battle
