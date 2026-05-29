@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type Message = {
-  id: string | number;
+  id: string;
   conversation_id: string;
   sender_id: string;
   text: string;
@@ -22,9 +22,9 @@ export default function ChatRoom() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [userId, setUserId] = useState("");
+  const [typing, setTyping] = useState(false);
 
   useEffect(() => {
-    if (!conversationId) return;
     init();
   }, [conversationId]);
 
@@ -36,7 +36,6 @@ export default function ChatRoom() {
 
     setUserId(user.id);
 
-    // 📩 load messages
     const { data: msgs } = await supabase
       .from("messages")
       .select("*")
@@ -45,7 +44,7 @@ export default function ChatRoom() {
 
     setMessages(msgs || []);
 
-    // 👀 mark as read
+    // mark seen
     await supabase
       .from("messages")
       .update({ is_read: true })
@@ -53,34 +52,42 @@ export default function ChatRoom() {
       .neq("sender_id", user.id);
   };
 
-  // 🔥 REALTIME (solo messaggi nuovi degli altri)
+  // REALTIME MESSAGES
   useEffect(() => {
-    if (!conversationId) return;
-
     const channel = supabase
       .channel(`chat:${conversationId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
+          schema: "public",
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
-          const newMsg = payload.new as Message;
-
+        (payload: any) => {
           setMessages((prev) => {
-            // evita duplicati (IMPORTANTISSIMO)
             const exists = prev.some(
-              (m) => m.id === newMsg.id
+              (m) => m.id === payload.new.id
             );
-
             if (exists) return prev;
-
-            return [...prev, newMsg];
+            return [...prev, payload.new];
           });
         }
       )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [conversationId]);
+
+  // TYPING (simple broadcast)
+  useEffect(() => {
+    const channel = supabase.channel(`typing:${conversationId}`);
+
+    channel
+      .on("broadcast", { event: "typing" }, () => {
+        setTyping(true);
+        setTimeout(() => setTyping(false), 1000);
+      })
       .subscribe();
 
     return () => {
@@ -88,88 +95,84 @@ export default function ChatRoom() {
     };
   }, [conversationId]);
 
-  // ✉️ SEND MESSAGE (OPTIMISTIC UI FIXED)
+  const sendTyping = () => {
+    const channel = supabase.channel(`typing:${conversationId}`);
+    channel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {},
+    });
+  };
+
   const sendMessage = async () => {
     if (!text.trim() || !userId) return;
 
-    const msgText = text;
+    const msg = text;
+    setText("");
+
     const tempId = crypto.randomUUID();
 
-    // 1. UI immediata (WHATSAPP STYLE)
     setMessages((prev) => [
       ...prev,
       {
         id: tempId,
         conversation_id: conversationId,
         sender_id: userId,
-        text: msgText,
+        text: msg,
         created_at: new Date().toISOString(),
         is_read: true,
       },
     ]);
 
-    setText("");
-
-    // 2. salva su DB
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
         sender_id: userId,
-        text: msgText,
+        text: msg,
         is_read: false,
       })
       .select()
       .single();
 
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    // 3. sostituisci messaggio temporaneo con quello reale
     setMessages((prev) =>
       prev.map((m) =>
         m.id === tempId ? data : m
       )
     );
 
-    // 4. aggiorna inbox (last message)
     await supabase
       .from("conversations")
       .update({
-        last_message: msgText,
+        last_message: msg,
         last_message_at: new Date().toISOString(),
       })
       .eq("id", conversationId);
   };
 
-  // ⌨️ ENTER TO SEND
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>
-  ) => {
-    if (e.key === "Enter") {
-      sendMessage();
-    }
+  // AUTO SCROLL
+  useEffect(() => {
+    const el = document.getElementById("bottom");
+    el?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleKey = (e: any) => {
+    if (e.key === "Enter") sendMessage();
   };
 
   return (
     <div className="flex flex-col h-screen bg-black text-white">
 
       {/* HEADER */}
-      <div className="p-3 border-b border-zinc-800 flex justify-between items-center">
+      <div className="p-3 border-b border-zinc-800 flex justify-between">
         <button
           onClick={() => router.push("/chat")}
           className="text-blue-400"
         >
           ← Chat
         </button>
-
-        <div className="text-sm text-gray-400">
-          Chat
-        </div>
-
-        <div className="w-10" />
+        <div>Chat</div>
+        <div />
       </div>
 
       {/* MESSAGES */}
@@ -185,23 +188,40 @@ export default function ChatRoom() {
               }`}
           >
             {m.text}
+
+            {m.sender_id === userId && (
+              <div className="text-[10px] text-blue-200 mt-1">
+                {m.is_read ? "✔✔ Seen" : "✔ Sent"}
+              </div>
+            )}
           </div>
         ))}
+
+        {typing && (
+          <div className="text-xs text-gray-400">
+            sta scrivendo...
+          </div>
+        )}
+
+        <div id="bottom" />
       </div>
 
       {/* INPUT */}
       <div className="p-3 flex gap-2 border-t border-zinc-800">
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onChange={(e) => {
+            setText(e.target.value);
+            sendTyping();
+          }}
+          onKeyDown={handleKey}
           className="flex-1 p-2 bg-zinc-900 rounded-lg"
           placeholder="Scrivi..."
         />
 
         <button
           onClick={sendMessage}
-          className="bg-blue-600 px-4 rounded-lg active:scale-95 transition"
+          className="bg-blue-600 px-4 rounded-lg"
         >
           Invia
         </button>
