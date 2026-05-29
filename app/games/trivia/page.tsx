@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { notifyFriends } from "@/app/lib/notifications";
 import Link from "next/link";
 
 type Question = {
@@ -188,6 +189,13 @@ export default function Trivia() {
       company: prof.company,
     }]);
 
+    await notifyFriends(
+      currentUser.id,
+      "trivia",
+      finalScore,
+      `${prof.first_name} ${prof.last_name}`
+    );
+
     fetchBoard(view);
   };
 
@@ -235,7 +243,7 @@ export default function Trivia() {
             <div className="w-full bg-slate-800 h-1 rounded-full mb-4">
               <div
                 className="h-1 bg-purple-500 rounded-full transition-all duration-300"
-                style={{ width: `${((index) / questions.length) * 100}%` }}
+                style={{ width: `${(index / questions.length) * 100}%` }}
               />
             </div>
 
@@ -256,7 +264,7 @@ export default function Trivia() {
                         : o === selected
                         ? "bg-red-600"
                         : "bg-slate-800 opacity-40"
-                      : "bg-slate-800 hover:bg-slate-700 active:scale-98"
+                      : "bg-slate-800 hover:bg-slate-700"
                   }`}
                 >
                   {o}
