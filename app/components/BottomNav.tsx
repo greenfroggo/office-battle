@@ -66,14 +66,14 @@ export default function BottomNav() {
           </div>
         </Link>
 
-        {/* Giochi */}
-        <Link href="/games" className="flex-1 text-center">
-          <span className={`text-xl ${isActive("/games") ? "text-blue-400" : "text-slate-400"}`}>
-            🎮
+        {/* CHAT (SOSTITUISCE GIOCHI) */}
+        <Link href="/chat" className="flex-1 text-center">
+          <span className={`text-xl ${isActive("/chat") ? "text-blue-400" : "text-slate-400"}`}>
+            💬
           </span>
         </Link>
 
-        {/* Amici + badge */}
+        {/* NETWORK / AMICI */}
         <Link href="/network" className="flex-1 text-center relative">
           <div className="relative inline-block">
             <span className={`text-xl ${isActive("/network") ? "text-blue-400" : "text-slate-400"}`}>
