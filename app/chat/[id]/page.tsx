@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type Message = {
-  id: string;
+  id: string | number;
   conversation_id: string;
   sender_id: string;
   text: string;
@@ -25,6 +25,7 @@ export default function ChatRoom() {
   const [typing, setTyping] = useState(false);
 
   useEffect(() => {
+    if (!conversationId) return;
     init();
   }, [conversationId]);
 
@@ -44,7 +45,7 @@ export default function ChatRoom() {
 
     setMessages(msgs || []);
 
-    // mark seen
+    // mark as read
     await supabase
       .from("messages")
       .update({ is_read: true })
@@ -52,8 +53,10 @@ export default function ChatRoom() {
       .neq("sender_id", user.id);
   };
 
-  // REALTIME MESSAGES
+  // 🔥 REALTIME FIXED (NO ASYNC CLEANUP -> VERCEL FIX)
   useEffect(() => {
+    if (!conversationId) return;
+
     const channel = supabase
       .channel(`chat:${conversationId}`)
       .on(
@@ -76,34 +79,13 @@ export default function ChatRoom() {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, [conversationId]);
-
-  // TYPING (simple broadcast)
-  useEffect(() => {
-    const channel = supabase.channel(`typing:${conversationId}`);
-
-    channel
-      .on("broadcast", { event: "typing" }, () => {
-        setTyping(true);
-        setTimeout(() => setTyping(false), 1000);
-      })
-      .subscribe();
-
+    // ✅ IMPORTANT: NO async here
     return () => {
       supabase.removeChannel(channel);
     };
   }, [conversationId]);
 
-  const sendTyping = () => {
-    const channel = supabase.channel(`typing:${conversationId}`);
-    channel.send({
-      type: "broadcast",
-      event: "typing",
-      payload: {},
-    });
-  };
-
+  // ✉️ SEND MESSAGE (OPTIMISTIC UI)
   const sendMessage = async () => {
     if (!text.trim() || !userId) return;
 
@@ -112,6 +94,7 @@ export default function ChatRoom() {
 
     const tempId = crypto.randomUUID();
 
+    // UI immediata
     setMessages((prev) => [
       ...prev,
       {
@@ -124,7 +107,7 @@ export default function ChatRoom() {
       },
     ]);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
@@ -135,12 +118,19 @@ export default function ChatRoom() {
       .select()
       .single();
 
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    // replace temp message
     setMessages((prev) =>
       prev.map((m) =>
         m.id === tempId ? data : m
       )
     );
 
+    // update inbox
     await supabase
       .from("conversations")
       .update({
@@ -150,13 +140,7 @@ export default function ChatRoom() {
       .eq("id", conversationId);
   };
 
-  // AUTO SCROLL
-  useEffect(() => {
-    const el = document.getElementById("bottom");
-    el?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleKey = (e: any) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") sendMessage();
   };
 
@@ -171,7 +155,11 @@ export default function ChatRoom() {
         >
           ← Chat
         </button>
-        <div>Chat</div>
+
+        <div className="text-sm text-gray-400">
+          Chat
+        </div>
+
         <div />
       </div>
 
@@ -188,33 +176,16 @@ export default function ChatRoom() {
               }`}
           >
             {m.text}
-
-            {m.sender_id === userId && (
-              <div className="text-[10px] text-blue-200 mt-1">
-                {m.is_read ? "✔✔ Seen" : "✔ Sent"}
-              </div>
-            )}
           </div>
         ))}
-
-        {typing && (
-          <div className="text-xs text-gray-400">
-            sta scrivendo...
-          </div>
-        )}
-
-        <div id="bottom" />
       </div>
 
       {/* INPUT */}
       <div className="p-3 flex gap-2 border-t border-zinc-800">
         <input
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            sendTyping();
-          }}
-          onKeyDown={handleKey}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="flex-1 p-2 bg-zinc-900 rounded-lg"
           placeholder="Scrivi..."
         />
